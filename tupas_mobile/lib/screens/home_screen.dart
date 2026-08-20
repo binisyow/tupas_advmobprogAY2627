@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'product_screen.dart';
+import 'cart_screen.dart';
 
 import '../widgets/custom_text.dart';
 
@@ -26,11 +27,10 @@ class _HomeScreenState extends State<HomeScreen> {
           automaticallyImplyLeading: false,
           elevation: 2,
           title: (_selectedIndex == 0)
-              ? Image.asset(
-                  'assets/images/nubdexchange_logo.png', scale: 11.sp,)
+              ? Image.asset('assets/images/nubdexchange_logo.png', scale: 11.sp)
               : CustomText(
                   text: (_selectedIndex == 1)
-                      ? 'Chat'
+                      ? 'Cart'
                       : (_selectedIndex == 2)
                       ? 'Profile'
                       : 'Home',
@@ -48,7 +48,12 @@ class _HomeScreenState extends State<HomeScreen> {
         body: PageView(
           physics: const NeverScrollableScrollPhysics(),
           controller: _pageController,
-          children: const <Widget>[ProductScreen()],
+          // Enhancement 1: cart page is a first-class destination in the app.
+          children: const <Widget>[
+            ProductScreen(),
+            CartScreen(),
+            Center(child: Text('Profile')),
+          ],
           onPageChanged: (page) {
             setState(() {
               _selectedIndex = page;
@@ -61,12 +66,24 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: _onTappedBar,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.shop_2), label: 'Shop'),
-            BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile',
+            BottomNavigationBarItem(
+              icon: Icon(Icons.shopping_cart),
+              label: 'Cart',
             ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
           currentIndex: _selectedIndex,
         ),
+        // Enhancement 2: chat was moved from the bottom navigation to a FAB.
+        // It is intentionally hidden while the cart screen is selected.
+        floatingActionButton: _selectedIndex == 1
+            ? null
+            : FloatingActionButton(
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Chat is not available yet.')),
+                ),
+                child: const Icon(Icons.chat),
+              ),
       ),
     );
   }

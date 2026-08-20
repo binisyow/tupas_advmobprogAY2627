@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 
 // models
 import '../models/product_model.dart';
+import '../providers/cart_provider.dart';
 
 // widgets
 import '../widgets/custom_text.dart';
@@ -22,6 +24,37 @@ class ProductDetailScreen extends StatefulWidget {
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final PageController _imageController = PageController();
   int _imageIndex = 0;
+  bool _isAddingToCart = false;
+  int _quantity = 1;
+
+  Future<void> _addToCart() async {
+    setState(() => _isAddingToCart = true);
+    try {
+      // Enhancement 3: sends this displayed product ID and its quantity to /carts/add.
+      await context.read<CartProvider>().addProduct(
+        widget.product,
+        _quantity,
+        5,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Product added to cart (simulated API response).'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not add product: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAddingToCart = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -133,6 +166,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ],
                     ),
                     SizedBox(height: 16.h),
+                    Row(
+                      children: [
+                        const Text('Quantity: '),
+                        IconButton(
+                          onPressed: _quantity > 1
+                              ? () => setState(() => _quantity--)
+                              : null,
+                          icon: const Icon(Icons.remove),
+                        ),
+                        Text('$_quantity'),
+                        IconButton(
+                          onPressed: () => setState(() => _quantity++),
+                          icon: const Icon(Icons.add),
+                        ),
+                      ],
+                    ),
                     CustomText(
                       text: 'Description',
                       fontSize: 15.sp,
@@ -140,6 +189,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                     SizedBox(height: 6.h),
                     CustomText(text: product.description, fontSize: 14.sp),
+                    SizedBox(height: 16.h),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _isAddingToCart ? null : _addToCart,
+                        icon: _isAddingToCart
+                            ? SizedBox(
+                                width: 18.w,
+                                height: 18.w,
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.add_shopping_cart),
+                        label: Text(
+                          _isAddingToCart ? 'Adding...' : 'Add to cart',
+                        ),
+                      ),
+                    ),
                     if (product.tags.isNotEmpty) ...[
                       SizedBox(height: 16.h),
                       Wrap(
@@ -203,8 +271,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                         i < review.rating
                                             ? Icons.star
                                             : Icons.star_border,
-                                        color:
-                                            Theme.of(context).colorScheme.onSurface,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
                                         size: 14.sp,
                                       ),
                                     ),
@@ -212,10 +281,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 ],
                               ),
                               SizedBox(height: 4.h),
-                              CustomText(
-                                text: review.comment,
-                                fontSize: 13.sp,
-                              ),
+                              CustomText(text: review.comment, fontSize: 13.sp),
                             ],
                           ),
                         ),
@@ -246,7 +312,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               fontWeight: FontWeight.w500,
             ),
           ),
-          Expanded(child: CustomText(text: value, fontSize: 13.sp)),
+          Expanded(
+            child: CustomText(text: value, fontSize: 13.sp),
+          ),
         ],
       ),
     );
@@ -268,12 +336,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 imageUrl: images[index],
                 fit: BoxFit.cover,
                 width: double.infinity,
-                placeholder: (_, _) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-                errorWidget: (_, _, _) => Center(
-                  child: Icon(Icons.image, size: 48.sp),
-                ),
+                placeholder: (_, _) =>
+                    const Center(child: CircularProgressIndicator()),
+                errorWidget: (_, _, _) =>
+                    Center(child: Icon(Icons.image, size: 48.sp)),
               );
             },
           ),
