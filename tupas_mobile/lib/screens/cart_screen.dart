@@ -1,0 +1,288 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
+// models
+import '../models/cart.dart';
+
+// services
+import '../services/cart_service.dart';
+import '../services/product_service.dart';
+import '../services/user_service.dart';
+
+// screens
+import 'detail_screen.dart';
+
+// widgets
+import '../widgets/custom_text.dart';
+
+// Cart tab (embedded in HomeScreen's PageView, no own Scaffold/AppBar).
+// Enhancement 3: loads one user's cart via CartService.getCartsByUser and
+// keeps totals in sync through CartService.addToCart when quantities change.
+// Enhancement 1: tapping an item opens its full DetailScreen.
+class CartScreen extends StatefulWidget {
+  const CartScreen({super.key});
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  List<CartProduct> _items = [];
+  double _discountedTotal = 0;
+  int? _userId;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCart();
+  }
+
+  // Enhancement 3: cart is scoped to the signed-in user's real id (read
+  // from the saved user data) instead of a hardcoded demo id.
+  Future<void> _loadCart() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final user = await UserService().getUser();
+      final carts = await CartService().getCartsByUser(user.id);
+      final cart = carts.isNotEmpty ? carts.first : null;
+      setState(() {
+        _userId = user.id;
+        _items = cart?.products ?? [];
+        _discountedTotal = cart?.discountedTotal ?? 0;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  // Enhancement 3: resubmits every line item with its new quantity to
+  // /carts/add and refreshes totals from the recomputed response.
+  Future<void> _changeQuantity(CartProduct item, int delta) async {
+    final userId = _userId;
+    if (userId == null) return;
+
+    final newQuantity = item.quantity + delta;
+    if (newQuantity < 1) return;
+
+    final products = _items
+        .map(
+          (p) => {
+            'id': p.id,
+            'quantity': p.id == item.id ? newQuantity : p.quantity,
+          },
+        )
+        .toList();
+
+    try {
+      final cart = await CartService().addToCart(
+        userId: userId,
+        products: products,
+      );
+      setState(() {
+        _items = cart.products;
+        _discountedTotal = cart.discountedTotal;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update cart: $e')));
+    }
+  }
+
+  // Enhancement 1: cart items only carry a product summary, so the full
+  // product is fetched by id before opening DetailScreen.
+  Future<void> _openDetail(int productId) async {
+    try {
+      final product = await ProductService().getProductById(productId);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DetailScreen(product: product)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load product: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(child: CustomText(text: 'Error: $_error', fontSize: 14.sp));
+    }
+
+    if (_items.isEmpty) {
+      return Center(
+        child: CustomText(text: 'Your cart is empty.', fontSize: 14.sp),
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.all(16.r),
+            itemCount: _items.length,
+            separatorBuilder: (_, _) => SizedBox(height: 12.h),
+            itemBuilder: (context, index) => _buildItemRow(_items[index]),
+          ),
+        ),
+        _buildFooter(),
+      ],
+    );
+  }
+
+  Widget _buildItemRow(CartProduct item) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+      child: Padding(
+        padding: EdgeInsets.all(10.r),
+        child: Row(
+          children: [
+            Expanded(
+              // Enhancement 1: tap the item (image/text) to view its detail.
+              child: InkWell(
+                onTap: () => _openDetail(item.id),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8.r),
+                      child: CachedNetworkImage(
+                        imageUrl: item.thumbnail,
+                        width: 56.w,
+                        height: 56.w,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, _, _) => Icon(Icons.image, size: 24.sp),
+                      ),
+                    ),
+                    SizedBox(width: 12.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CustomText(
+                            text: item.title,
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: 4.h),
+                          CustomText(
+                            text: '\$${item.price.toStringAsFixed(2)}',
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          CustomText(
+                            text:
+                                '${item.discountPercentage.toStringAsFixed(0)}% off · \$${item.discountedTotal.toStringAsFixed(2)} total',
+                            fontSize: 11.sp,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () => _changeQuantity(item, 1),
+                  child: CircleAvatar(
+                    radius: 12.r,
+                    backgroundColor: Colors.amber,
+                    child: Icon(Icons.add, size: 14.sp, color: Colors.black),
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                CustomText(text: '${item.quantity}', fontSize: 13.sp),
+                SizedBox(height: 4.h),
+                InkWell(
+                  onTap: () => _changeQuantity(item, -1),
+                  child: CircleAvatar(
+                    radius: 12.r,
+                    backgroundColor: Colors.grey.shade300,
+                    child: Icon(Icons.remove, size: 14.sp, color: Colors.black),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.all(16.r),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CustomText(text: 'Subtotal', fontSize: 14.sp),
+                const Spacer(),
+                CustomText(
+                  text: '\$${_discountedTotal.toStringAsFixed(2)}',
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ],
+            ),
+            SizedBox(height: 4.h),
+            Row(
+              children: [
+                CustomText(text: 'Delivery Fee', fontSize: 14.sp),
+                const Spacer(),
+                CustomText(text: 'Free', fontSize: 14.sp),
+              ],
+            ),
+            SizedBox(height: 16.h),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                ),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Order confirmed (demo)')),
+                  );
+                },
+                child: CustomText(
+                  text: 'Confirm Order',
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
