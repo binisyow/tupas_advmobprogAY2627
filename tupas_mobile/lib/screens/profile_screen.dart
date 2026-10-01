@@ -22,18 +22,157 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late final Future<User> _userFuture;
+  late Future<User> _userFuture;
 
   @override
   void initState() {
     super.initState();
-    _userFuture = UserService().getUser();
+    _refreshUser();
   }
 
-  Future<void> _logout(BuildContext context) async {
-    await UserService().logout();
-    if (!context.mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/signin', (route) => false);
+  void _refreshUser() {
+    _userFuture = _loadUser();
+  }
+
+  Future<User> _loadUser() async {
+    final userData = await UserService().getUserData();
+    return User.fromJson(userData);
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _editUsername() async {
+    final user = await _userFuture;
+    if (!mounted) return;
+    final controller = TextEditingController(text: user.username);
+    final username = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update username'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Username'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (username == null || username.isEmpty) return;
+    try {
+      await UserService().updateUsername(username);
+      if (!mounted) return;
+      setState(_refreshUser);
+      _showMessage('Username updated');
+    } catch (error) {
+      if (mounted) _showMessage('Could not update username: $error');
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final formKey = GlobalKey<FormState>();
+    final currentController = TextEditingController();
+    final newController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change password'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: currentController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Current password',
+                ),
+                validator: (value) => value == null || value.isEmpty
+                    ? 'Current password is required'
+                    : null,
+              ),
+              TextFormField(
+                controller: newController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+                validator: (value) => value == null || value.length < 8
+                    ? 'Use at least 8 characters'
+                    : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context, true);
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await UserService().resetPasswordFromCurrentPassword(
+          currentPassword: currentController.text,
+          newPassword: newController.text,
+        );
+        if (mounted) _showMessage('Password updated');
+      } catch (error) {
+        if (mounted) _showMessage('Could not update password: $error');
+      }
+    }
+    currentController.dispose();
+    newController.dispose();
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await UserService().deleteAccount();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/signin', (route) => false);
+    } catch (error) {
+      if (mounted) _showMessage('Could not delete account: $error');
+    }
   }
 
   @override
@@ -96,6 +235,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               fontWeight: FontWeight.w600,
                               color: Colors.amber.shade800,
                             ),
+                            TextButton.icon(
+                              onPressed: _editUsername,
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text('Edit username'),
+                            ),
                           ],
                         ),
                       ),
@@ -124,6 +268,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _buildInfoRow(Icons.wc, 'Gender', user.gender),
                         Divider(height: 1, color: Colors.grey.shade300),
                         _buildInfoRow(
+                          Icons.cake_outlined,
+                          'Age',
+                          '${user.age}',
+                        ),
+                        Divider(height: 1, color: Colors.grey.shade300),
+                        _buildInfoRow(
+                          Icons.phone_outlined,
+                          'Contact',
+                          user.phone.isEmpty ? 'Not provided' : user.phone,
+                        ),
+                        Divider(height: 1, color: Colors.grey.shade300),
+                        _buildInfoRow(
+                          Icons.verified_user_outlined,
+                          'Login type',
+                          user.loginType == LoginType.firebase.name
+                              ? 'Firebase'
+                              : 'DummyJSON',
+                        ),
+                        Divider(height: 1, color: Colors.grey.shade300),
+                        _buildInfoRow(
                           Icons.badge_outlined,
                           'User ID',
                           '#${user.id}',
@@ -133,6 +297,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 SizedBox(height: 24.h),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8.w,
+                  runSpacing: 8.h,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _changePassword,
+                      icon: const Icon(Icons.lock_reset),
+                      label: const Text('Change password'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _deleteAccount,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Delete account'),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12.h),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -144,7 +326,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       padding: EdgeInsets.symmetric(vertical: 12.h),
                     ),
-                    onPressed: () => _logout(context),
+                    onPressed: () async {
+                      try {
+                        await UserService().signOut();
+                        if (!context.mounted) return;
+                        Navigator.pushNamedAndRemoveUntil(
+                          context,
+                          '/signin',
+                          (route) => false,
+                        );
+                      } catch (error) {
+                        if (context.mounted) {
+                          _showMessage('Could not sign out: $error');
+                        }
+                      }
+                    },
                     icon: Icon(Icons.logout, size: 18.sp),
                     label: CustomText(
                       text: 'Log Out',

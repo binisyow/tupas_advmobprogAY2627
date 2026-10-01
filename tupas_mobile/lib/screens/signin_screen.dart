@@ -40,13 +40,10 @@ class _SigninScreenState extends State<SigninScreen> {
     });
     if (_formKey.currentState!.validate()) {
       try {
-        final response = await userService.loginUser(
-          _usernameController.text,
-          _passwordController.text,
+        final response = await userService.signInWithIdentifier(
+          identifier: _usernameController.text,
+          password: _passwordController.text,
         );
-
-        // Save user data to SharedPreferences
-        await userService.saveUserData(response);
 
         if (!mounted) return;
         setState(() {
@@ -59,9 +56,9 @@ class _SigninScreenState extends State<SigninScreen> {
         setState(() {
           _isLoading = false;
         });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Login failed: ${e.toString()}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: ${e.toString()}')),
+        );
       }
     } else {
       setState(() {
@@ -107,9 +104,10 @@ class _SigninScreenState extends State<SigninScreen> {
                 SizedBox(height: 40.h),
                 TextFormField(
                   controller: _usernameController,
-                  decoration: _fieldDecoration('Username'),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: _fieldDecoration('Username or email'),
                   validator: (value) => (value == null || value.isEmpty)
-                      ? 'Username is required'
+                      ? 'Username or email is required'
                       : null,
                 ),
                 SizedBox(height: 16.h),
@@ -152,6 +150,10 @@ class _SigninScreenState extends State<SigninScreen> {
                             ),
                     ),
                   ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pushNamed(context, '/signup'),
+                  child: Text('Create a Firebase account'),
                 ),
               ],
             ),

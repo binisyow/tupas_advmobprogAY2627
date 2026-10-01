@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "557612323047",
+    "project_id": "advmobprog-firebase-eb9ad",
+    "storage_bucket": "advmobprog-firebase-eb9ad.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:557612323047:android:c14637d3a22bb9729c1242",
+        "android_client_info": {
+          "package_name": "com.example.tupas_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMr6nRBWvDo47tJBXcAnpBowx4qRC_Yv0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

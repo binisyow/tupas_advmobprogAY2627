@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 // providers
 import '../providers/theme_provider.dart';
+import '../services/user_service.dart';
 
 // widgets
 import '../widgets/custom_text.dart';
@@ -11,6 +12,19 @@ import '../widgets/custom_text.dart';
 // Enhancement 3: settings page that hosts the dark/light mode switch
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _signOut(BuildContext context) async {
+    try {
+      await UserService().signOut();
+      if (!context.mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/signin', (route) => false);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not sign out: $error')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +50,15 @@ class SettingsScreen extends StatelessWidget {
             ),
             value: themeProvider.isDark,
             onChanged: (_) => themeProvider.toggleTheme(),
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: CustomText(
+              text: 'Log out',
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w600,
+            ),
+            onTap: () => _signOut(context),
           ),
         ],
       ),

@@ -8,6 +8,9 @@ class User {
   final String image;
   final String accessToken;
   final String refreshToken;
+  final int age;
+  final String phone;
+  final String loginType;
 
   User({
     required this.id,
@@ -19,6 +22,9 @@ class User {
     required this.image,
     required this.accessToken,
     required this.refreshToken,
+    this.age = 0,
+    this.phone = '',
+    this.loginType = '',
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -32,6 +38,9 @@ class User {
       image: json['image'] ?? '',
       accessToken: json['accessToken'] ?? '',
       refreshToken: json['refreshToken'] ?? '',
+      age: json['age'] ?? 0,
+      phone: json['phone'] ?? '',
+      loginType: json['loginType'] ?? '',
     );
   }
 
@@ -46,6 +55,9 @@ class User {
       'image': image,
       'accessToken': accessToken,
       'refreshToken': refreshToken,
+      'age': age,
+      'phone': phone,
+      'loginType': loginType,
     };
   }
 }
