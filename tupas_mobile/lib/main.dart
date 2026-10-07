@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 // screens
 import 'screens/home_screen.dart';
+import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/signin_screen.dart';
 import 'screens/signup_screen.dart';
@@ -51,6 +52,7 @@ class TupasAdvMobProg extends StatelessWidget {
               '/signin': (context) => const SigninScreen(),
               '/signup': (context) => const SignupScreen(),
               '/home': (context) => const HomeScreen(),
+              '/chat': (context) => const ChatScreen(),
               '/settings': (context) => const SettingsScreen(),
             },
           );

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants.dart';
 import '../models/user.dart';
+import 'chat_service.dart';
 
 enum LoginType { dummyJson, firebase }
 
@@ -47,22 +48,56 @@ class UserService {
     final user = credential.user;
     if (user == null) throw Exception('Firebase sign-in returned no user.');
 
+    final prefs = await SharedPreferences.getInstance();
+    final hasCachedProfile = prefs.getString('firebaseUid') == user.uid;
+    final authDisplayName = (user.displayName ?? '').trim();
+    final nameParts = authDisplayName.isEmpty
+        ? <String>[]
+        : authDisplayName.split(RegExp(r'\s+'));
+    final cachedFirstName = prefs.getString('firstName') ?? '';
+    final cachedLastName = prefs.getString('lastName') ?? '';
+    final hasCachedAccountName =
+        hasCachedProfile &&
+        cachedFirstName.trim().isNotEmpty &&
+        cachedLastName.trim().isNotEmpty;
+    final hasAuthAccountName = nameParts.length > 1;
+    final firstName = hasCachedAccountName
+        ? cachedFirstName
+        : hasAuthAccountName
+        ? nameParts.first
+        : '';
+    final lastName = hasCachedAccountName
+        ? cachedLastName
+        : hasAuthAccountName
+        ? nameParts.skip(1).join(' ')
+        : '';
+    final accountName = '$firstName $lastName'.trim();
+    if (lastName.isNotEmpty && user.displayName != accountName) {
+      await user.updateDisplayName(accountName);
+    }
     final token = await user.getIdToken();
     data = {
       'id': 0,
       'firebaseUid': user.uid,
-      'username': user.displayName ?? user.email?.split('@').first ?? '',
+      'username': hasCachedProfile
+          ? prefs.getString('username') ?? user.email?.split('@').first ?? ''
+          : user.email?.split('@').first ?? '',
       'email': user.email ?? '',
-      'firstName': '',
-      'lastName': '',
-      'age': 0,
-      'phone': '',
+      'firstName': firstName,
+      'lastName': lastName,
+      'age': hasCachedProfile ? prefs.getInt('age') ?? 0 : 0,
+      'phone': hasCachedProfile ? prefs.getString('phone') ?? '' : '',
       'gender': '',
       'image': '',
       'accessToken': token ?? '',
       'refreshToken': '',
       'loginType': LoginType.firebase.name,
     };
+    await ChatService().upsertUserProfile(
+      uid: user.uid,
+      displayName: accountName.isEmpty ? user.email ?? '' : accountName,
+      email: user.email ?? '',
+    );
     await saveUserData(data);
     return data;
   }
@@ -83,7 +118,8 @@ class UserService {
     final user = credential.user;
     if (user == null) throw Exception('Firebase signup returned no user.');
 
-    await user.updateDisplayName(username.trim());
+    final accountName = '${firstName.trim()} ${lastName.trim()}'.trim();
+    await user.updateDisplayName(accountName);
     final token = await user.getIdToken();
     data = {
       'id': 0,
@@ -100,6 +136,12 @@ class UserService {
       'refreshToken': '',
       'loginType': LoginType.firebase.name,
     };
+    await ChatService().upsertUserProfile(
+      uid: user.uid,
+      displayName: accountName.isEmpty ? emailAddress.trim() : accountName,
+      email: emailAddress.trim(),
+      isNewAccount: true,
+    );
     await saveUserData(data);
     return data;
   }
@@ -215,7 +257,6 @@ class UserService {
     if (userData['loginType'] == LoginType.firebase.name) {
       final user = _firebaseAuth.currentUser;
       if (user == null) throw Exception('No Firebase user is signed in.');
-      await user.updateDisplayName(username.trim());
     } else {
       final response = await http.patch(
         Uri.parse('$host/users/${userData['id']}'),
@@ -260,29 +301,32 @@ class UserService {
         throw Exception(response.body);
       }
     }
-    await signOut();
+    await signOut(clearProfile: true);
   }
 
-  Future<void> signOut() async {
+  Future<void> signOut({bool clearProfile = false}) async {
     try {
       if (_firebaseAuth.currentUser != null) await _firebaseAuth.signOut();
       final prefs = await SharedPreferences.getInstance();
-      for (final key in [
-        'id',
-        'username',
-        'email',
-        'firstName',
-        'lastName',
-        'gender',
-        'image',
-        'accessToken',
-        'refreshToken',
-        'token',
-        'age',
-        'phone',
-        'firebaseUid',
-        'loginType',
-      ]) {
+      final keysToRemove = clearProfile
+          ? [
+              'id',
+              'username',
+              'email',
+              'firstName',
+              'lastName',
+              'gender',
+              'image',
+              'accessToken',
+              'refreshToken',
+              'token',
+              'age',
+              'phone',
+              'firebaseUid',
+              'loginType',
+            ]
+          : ['id', 'accessToken', 'refreshToken', 'token', 'loginType'];
+      for (final key in keysToRemove) {
         await prefs.remove(key);
       }
     } catch (e) {

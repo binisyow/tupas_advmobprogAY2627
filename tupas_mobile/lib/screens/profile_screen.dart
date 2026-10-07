@@ -21,6 +21,125 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+class _UsernameEditDialog extends StatefulWidget {
+  final String initialUsername;
+
+  const _UsernameEditDialog({required this.initialUsername});
+
+  @override
+  State<_UsernameEditDialog> createState() => _UsernameEditDialogState();
+}
+
+class _UsernameEditDialogState extends State<_UsernameEditDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialUsername);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _close([String? username]) {
+    FocusScope.of(context).unfocus();
+    Navigator.of(context).pop(username);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Update username'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'Username'),
+      ),
+      actions: [
+        TextButton(onPressed: _close, child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => _close(_controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog();
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentController = TextEditingController();
+  final _newController = TextEditingController();
+
+  @override
+  void dispose() {
+    _currentController.dispose();
+    _newController.dispose();
+    super.dispose();
+  }
+
+  void _close([({String currentPassword, String newPassword})? result]) {
+    FocusScope.of(context).unfocus();
+    Navigator.of(context).pop(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change password'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _currentController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Current password'),
+              validator: (value) => value == null || value.isEmpty
+                  ? 'Current password is required'
+                  : null,
+            ),
+            TextFormField(
+              controller: _newController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'New password'),
+              validator: (value) => value == null || value.length < 8
+                  ? 'Use at least 8 characters'
+                  : null,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _close, child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              _close((
+                currentPassword: _currentController.text,
+                newPassword: _newController.text,
+              ));
+            }
+          },
+          child: const Text('Update'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ProfileScreenState extends State<ProfileScreen> {
   late Future<User> _userFuture;
 
@@ -45,32 +164,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<T?> _showProfileDialog<T>({required WidgetBuilder builder}) {
+    return Navigator.of(context).push<T>(
+      DialogRoute<T>(
+        context: context,
+        builder: builder,
+        barrierDismissible: true,
+        themes: null,
+      ),
+    );
+  }
+
   Future<void> _editUsername() async {
     final user = await _userFuture;
     if (!mounted) return;
-    final controller = TextEditingController(text: user.username);
-    final username = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Update username'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Username'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    final username = await _showProfileDialog<String>(
+      builder: (_) => _UsernameEditDialog(initialUsername: user.username),
     );
-    controller.dispose();
     if (username == null || username.isEmpty) return;
     try {
       await UserService().updateUsername(username);
@@ -83,83 +193,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changePassword() async {
-    final formKey = GlobalKey<FormState>();
-    final currentController = TextEditingController();
-    final newController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Change password'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: currentController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Current password',
-                ),
-                validator: (value) => value == null || value.isEmpty
-                    ? 'Current password is required'
-                    : null,
-              ),
-              TextFormField(
-                controller: newController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'New password'),
-                validator: (value) => value == null || value.length < 8
-                    ? 'Use at least 8 characters'
-                    : null,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context, true);
-              }
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
+    final passwords =
+        await _showProfileDialog<
+          ({String currentPassword, String newPassword})
+        >(builder: (_) => const _ChangePasswordDialog());
+    if (passwords != null) {
       try {
         await UserService().resetPasswordFromCurrentPassword(
-          currentPassword: currentController.text,
-          newPassword: newController.text,
+          currentPassword: passwords.currentPassword,
+          newPassword: passwords.newPassword,
         );
         if (mounted) _showMessage('Password updated');
       } catch (error) {
         if (mounted) _showMessage('Could not update password: $error');
       }
     }
-    currentController.dispose();
-    newController.dispose();
   }
 
   Future<void> _deleteAccount() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
+    final confirmed = await _showProfileDialog<bool>(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete account?'),
         content: const Text('This action cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Delete'),
           ),
         ],
@@ -190,6 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: CustomText(text: 'Not signed in.', fontSize: 14.sp),
           );
         }
+        final displayName = '${user.firstName} ${user.lastName}'.trim();
 
         return SafeArea(
           child: SingleChildScrollView(
@@ -224,7 +287,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             SizedBox(height: 14.h),
                             CustomText(
-                              text: '${user.firstName} ${user.lastName}'.trim(),
+                              text: displayName.isEmpty
+                                  ? 'Account name unavailable'
+                                  : displayName,
                               fontSize: 19.sp,
                               fontWeight: FontWeight.w600,
                             ),

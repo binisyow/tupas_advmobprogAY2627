@@ -103,9 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 backgroundColor: Colors.deepPurple.shade50,
                 foregroundColor: Colors.deepPurple.shade700,
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Chat coming soon')),
-                  );
+                  Navigator.pushNamed(context, '/chat');
                 },
                 child: const Icon(Icons.chat),
               ),
